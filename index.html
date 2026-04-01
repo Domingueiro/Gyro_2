@@ -54,38 +54,18 @@
 <body>
 
 <header>
-  <h1>Montagem Giroscópio — Binário + Semi-anel</h1>
-  <p>Plano X'Y · Semi-anel no plano Z"X" · Pendular ±30°</p>
+  <h1>Montagem Giroscópio — Passo 1</h1>
+  <p>Base no plano XZ · Eixo vertical central · 4 vistas ortogonais</p>
 </header>
 
 <div class="wrap"><canvas id="c" width="680" height="680"></canvas></div>
 
-<div style="position:relative;z-index:1;display:flex;gap:8px;margin-top:4px;">
-  <button id="btnPause" onclick="togglePause()"
-    style="font-family:'Space Mono',monospace;font-size:0.58rem;padding:7px 18px;
-    border:1.5px solid #c8b898;background:#f0e6d0;color:#2a2e3a;border-radius:3px;cursor:pointer;flex:1;">
-    ⏸ Pausar
-  </button>
-  <button onclick="reset()"
-    style="font-family:'Space Mono',monospace;font-size:0.58rem;padding:7px 18px;
-    border:1.5px solid #c8b898;background:#f0e6d0;color:#2a2e3a;border-radius:3px;cursor:pointer;flex:1;">
-    ⟲ Reset
-  </button>
-</div>
-<div style="position:relative;z-index:1;background:#f0e6d0;border:1px solid #c8b898;
-  border-radius:4px;padding:8px 14px;font-family:'Space Mono',monospace;font-size:0.55rem;color:#7a6e5a;">
-  <label style="display:block;margin-bottom:4px;letter-spacing:0.08em;text-transform:uppercase;">
-    Torção da base em Y: <span id="lblBase">0.0</span>°
-  </label>
-  <input type="range" min="-45" max="45" step="0.5" value="0"
-    style="width:100%;accent-color:#5a6a8a;"
-    oninput="baseAngle=parseFloat(this.value);document.getElementById('lblBase').textContent=parseFloat(this.value).toFixed(1);">
-</div>
-
 <div class="legend">
-  <span>L = 1.0</span> · Binário pendular −30°→0°→−30° · passo 0.5°/frame ·
-  Massas sempre em z=0 (plano X'Y, azul) ·
-  <span>ISO 3D</span> · <span>Vista←X/YZ</span> · <span>Vista↓Y/XZ</span> · <span>Vista◉Z/XY</span>
+  <span>L = 1.0 (unidade de referência)</span> ·
+  Base: L×L, espessura 0.01L, de y=−0.01 a y=0 ·
+  Coluna: 0.1L×0.1L, altura 0.6L, borda +X, plano XY ·
+  <span>ISO 3D</span> (sup-esq) · <span>Vista←X / YZ</span> (sup-dir) ·
+  <span>Vista↓Y / XZ</span> (inf-esq) · <span>Vista◉Z / XY</span> (inf-dir)
 </div>
 
 <script>
@@ -176,25 +156,6 @@ function grid(x0,y0){
 
 function qtitle(t){
   ctx.font="bold 8px 'Space Mono'";ctx.fillStyle='#7a6e5a';ctx.fillText(t,8,14);
-}
-
-// ═══════════════════════════════════════════════════════
-// ROTAÇÃO EM TORNO DE Y (para a base girar sobre Y)
-// Aplica baseAngle (graus) a um ponto mundo antes de projetar
-// ═══════════════════════════════════════════════════════
-function rotateY(wx,wy,wz,deg){
-  const r=deg*Math.PI/180;
-  const c=Math.cos(r), s=Math.sin(r);
-  return [wx*c+wz*s, wy, -wx*s+wz*c];
-}
-
-// Projector que aplica rotação de base antes de projetar
-// Retorna função com mesma assinatura de pISO/pX/pY/pZ
-function mkProj(baseProj, S, cx, cy){
-  return function(wx,wy,wz,_S,_cx,_cy){
-    const [rx,ry,rz]=rotateY(wx,wy,wz,baseAngle);
-    return baseProj(rx,ry,rz, S, cx, cy);
-  };
 }
 
 // ═══════════════════════════════════════════════════════
@@ -474,90 +435,42 @@ function drawSemiRingGray(proj,S,cx,cy){
 }
 
 // ═══════════════════════════════════════════════════════
-// ESTADO
+// ESTADO DE ANIMAÇÃO — pendular 0->30->0 graus, passo 0.5/frame
 // ═══════════════════════════════════════════════════════
-let spinAngle = 0;      // graus, pendular invertido (começa indo para -30)
-let spinDir   = -1;     // -1 = vai para -30, +1 = volta para 0
-let baseAngle = 0;      // rotacao da base em torno de Y (graus)
-let ringAngle = 0;      // torcao do semi-anel em torno do eixo do cilindro
-let paused    = false;
+let spinAngle = 0;
+let spinDir   = 1;
+let lastTime  = null;
 const STEP_DEG = 0.5;
 const MAX_DEG  = 30.0;
 const MASS_R   = 0.03 * L;
 
-function reset(){
-  spinAngle=0; spinDir=-1; baseAngle=0; ringAngle=0; paused=false;
-  document.getElementById('btnPause').textContent='⏸ Pausar';
-  var sl=document.querySelector('input[type=range]');
-  if(sl){ sl.value=0; document.getElementById('lblBase').textContent='0.0'; }
-}
-function togglePause(){
-  paused=!paused;
-  document.getElementById('btnPause').textContent = paused ? '▶ Continuar' : '⏸ Pausar';
-}
-
-// ═══════════════════════════════════════════════════════
-// PLANO X'Y — plano das massas (z=0 sempre)
-// Grade vertical em z=0, mostrando x e y
-// ═══════════════════════════════════════════════════════
-function drawPlaneXpY(proj,S,cx,cy){
-  const p=(x,y,z)=>proj(x,y,z,S,cx,cy);
-  const ext=0.65*L;
-  // Vértices do plano z=0: (±ext, YP2±ext, 0)
-  const verts=[
-    p( ext, YP2+ext, 0), p(-ext, YP2+ext, 0),
-    p(-ext, YP2-ext, 0), p( ext, YP2-ext, 0)
-  ];
-  ctx.save(); ctx.globalAlpha=0.08;
-  ctx.beginPath(); ctx.moveTo(verts[0][0],verts[0][1]);
-  verts.forEach(function(v){ctx.lineTo(v[0],v[1]);}); ctx.closePath();
-  ctx.fillStyle='#4080c0'; ctx.fill(); ctx.restore();
-  ctx.save(); ctx.globalAlpha=0.30; ctx.setLineDash([4,4]);
-  ctx.beginPath(); ctx.moveTo(verts[0][0],verts[0][1]);
-  verts.forEach(function(v){ctx.lineTo(v[0],v[1]);}); ctx.closePath();
-  ctx.strokeStyle='#4080c0'; ctx.lineWidth=0.8; ctx.stroke();
-  ctx.setLineDash([]); ctx.restore();
-  // Label
-  const [lx,ly]=p(ext*0.7, YP2+ext*0.7, 0);
-  ctx.save(); ctx.globalAlpha=0.5;
-  ctx.font="8px 'Space Mono'"; ctx.fillStyle='#4080c0';
-  ctx.fillText("X'Y", lx, ly); ctx.restore();
-}
-
-// ═══════════════════════════════════════════════════════
-// BINÁRIO
-// Eixo de giro = eixo da haste, coincidente com Z', engastado
-// nos extremos do semi-anel: (0,YP2,-SR_OUT) e (0,YP2,+SR_OUT).
-// As massas giram em torno desse eixo NO PLANO X'Y (z=0).
-// Em a=0°: M1=(0, YP2+SR_OUT, 0), M2=(0, YP2-SR_OUT, 0) — alinhadas +Y/-Y.
-// SENTIDO INVERTIDO: a negativo = gira para -X primeiro.
-// ═══════════════════════════════════════════════════════
 function drawBinary(proj,S,cx,cy){
   const p=(x,y,z)=>proj(x,y,z,S,cx,cy);
-  const a = spinAngle * Math.PI / 180;  // negativo = sentido invertido
+  const a = spinAngle * Math.PI / 180;
 
-  // Massas no plano X'Y (z=0)
+  // Massas giram no plano XY centrado em (0,YP2,0), raio SR_OUT
+  // a=0: alinhadas com Y. a=30: inclinadas 30 graus.
   const M1 = [ SR_OUT*Math.sin(a),  YP2 + SR_OUT*Math.cos(a), 0];
   const M2 = [-SR_OUT*Math.sin(a),  YP2 - SR_OUT*Math.cos(a), 0];
   const [m1x,m1y]=p(...M1), [m2x,m2y]=p(...M2);
 
-  // Mancais (extremos do semi-anel)
+  // Mancais de apoio nas extremidades do semi-anel
   const SUP1=[0, YP2, -SR_OUT], SUP2=[0, YP2, +SR_OUT];
   const [s1x,s1y]=p(...SUP1), [s2x,s2y]=p(...SUP2);
 
-  // Arcos de trajetoria (de 0 a -30 graus = sentido invertido)
+  // Arcos de trajetoria (0 a 30 graus)
   ctx.save(); ctx.globalAlpha=0.20; ctx.setLineDash([3,4]);
   ctx.strokeStyle='#3a7abf'; ctx.lineWidth=1;
   ctx.beginPath();
   for(let i=0;i<=60;i++){
-    const t=-(i/60)*MAX_DEG*Math.PI/180;
+    const t=(i/60)*MAX_DEG*Math.PI/180;
     const [tx,ty]=p(SR_OUT*Math.sin(t), YP2+SR_OUT*Math.cos(t), 0);
     i===0?ctx.moveTo(tx,ty):ctx.lineTo(tx,ty);
   }
   ctx.stroke();
   ctx.beginPath();
   for(let i=0;i<=60;i++){
-    const t=-(i/60)*MAX_DEG*Math.PI/180;
+    const t=(i/60)*MAX_DEG*Math.PI/180;
     const [tx,ty]=p(-SR_OUT*Math.sin(t), YP2-SR_OUT*Math.cos(t), 0);
     i===0?ctx.moveTo(tx,ty):ctx.lineTo(tx,ty);
   }
@@ -565,7 +478,7 @@ function drawBinary(proj,S,cx,cy){
   ctx.setLineDash([]); ctx.restore();
 
   // Conexoes massa-mancal
-  ctx.save(); ctx.globalAlpha=0.28;
+  ctx.save(); ctx.globalAlpha=0.30;
   ctx.strokeStyle='#8a9ab0'; ctx.lineWidth=1;
   [[m1x,m1y,s1x,s1y],[m1x,m1y,s2x,s2y],
    [m2x,m2y,s1x,s1y],[m2x,m2y,s2x,s2y]].forEach(function(seg){
@@ -573,7 +486,7 @@ function drawBinary(proj,S,cx,cy){
   });
   ctx.restore();
 
-  // Haste
+  // Haste principal
   ctx.save();
   ctx.beginPath(); ctx.moveTo(m1x,m1y); ctx.lineTo(m2x,m2y);
   ctx.strokeStyle='#5a6a8a'; ctx.lineWidth=3; ctx.lineCap='round'; ctx.stroke();
@@ -607,96 +520,104 @@ function drawBinary(proj,S,cx,cy){
   const [ox2,oy2]=p(0,YP2,0);
   ctx.save();
   ctx.font="bold 8px 'Space Mono'"; ctx.fillStyle='#5a6a8a';
-  ctx.fillText(Math.abs(spinAngle).toFixed(1)+'deg', ox2+8, oy2-5);
+  ctx.fillText(spinAngle.toFixed(1)+'deg', ox2+8, oy2-5);
   ctx.restore();
 }
 
 // ═══════════════════════════════════════════════════════
-// COTA
-// ═══════════════════════════════════════════════════════
-function drawDim(proj,S,cx,cy,p1w,p2w,label,offset,col){
-  col=col||'#7a6e5a';
-  var c1=proj(p1w[0],p1w[1],p1w[2],S,cx,cy);
-  var c2=proj(p2w[0],p2w[1],p2w[2],S,cx,cy);
-  var x1=c1[0],y1=c1[1],x2=c2[0],y2=c2[1];
-  var dx=x2-x1,dy=y2-y1,l=Math.hypot(dx,dy);
-  if(l<1) return;
-  var nx=-dy/l,ny=dx/l;
-  var ox=nx*offset,oy=ny*offset;
-  ctx.save(); ctx.globalAlpha=0.6; ctx.setLineDash([3,3]);
-  ctx.beginPath(); ctx.moveTo(x1+ox,y1+oy); ctx.lineTo(x2+ox,y2+oy);
-  ctx.strokeStyle=col; ctx.lineWidth=1; ctx.stroke();
+function drawDim(proj,S,cx,cy,p1w,p2w,label,offset,col='#7a6e5a'){
+  const [x1,y1]=proj(...p1w,S,cx,cy);
+  const [x2,y2]=proj(...p2w,S,cx,cy);
+  // linha de cota (deslocada)
+  const dx=x2-x1,dy=y2-y1,l=Math.hypot(dx,dy);
+  const nx=-dy/l, ny=dx/l; // perpendicular
+  const ox=nx*offset, oy=ny*offset;
+  ctx.save();ctx.globalAlpha=0.65;
+  ctx.setLineDash([3,3]);
+  ctx.beginPath();ctx.moveTo(x1+ox,y1+oy);ctx.lineTo(x2+ox,y2+oy);
+  ctx.strokeStyle=col;ctx.lineWidth=1;ctx.stroke();
+  // Terminadores
   ctx.setLineDash([]);
-  [[x1,y1],[x2,y2]].forEach(function(pt){
-    ctx.beginPath(); ctx.moveTo(pt[0]+ox,pt[1]+oy);
-    ctx.lineTo(pt[0]+ox+nx*5,pt[1]+oy+ny*5);
-    ctx.stroke();
+  [[x1,y1],[x2,y2]].forEach(([x,y])=>{
+    ctx.beginPath();ctx.moveTo(x+ox,y+oy);ctx.lineTo(x+ox+nx*5,y+oy+ny*5);
+    ctx.lineWidth=1;ctx.stroke();
   });
-  var mx=(x1+x2)/2+ox+nx*8, my=(y1+y2)/2+oy+ny*8;
-  ctx.font="7px 'Space Mono'"; ctx.fillStyle=col;
+  // Label
+  const mx=(x1+x2)/2+ox+nx*8, my=(y1+y2)/2+oy+ny*8;
+  ctx.font="7px 'Space Mono'";ctx.fillStyle=col;
   ctx.fillText(label,mx,my);
   ctx.restore();
 }
 
 // ═══════════════════════════════════════════════════════
-// RENDER DE UM QUADRANTE
+// RENDER COMPLETO DE UM QUADRANTE
 // ═══════════════════════════════════════════════════════
 function renderQ(proj,S,cx,cy,showDims){
-  // Peças FIXAS no espaço (não giram com a base)
   drawAxes(proj,S,cx,cy);
-  drawBase(proj,S,cx,cy);        // a base SI gira — mas é fina, usamos rotacionada
-  drawPlaneXpZp(proj,S,cx,cy);   // plano X'Z' fixo de referência
-  drawPlaneXpY(proj,S,cx,cy);    // plano X'Y fixo (confinamento das massas)
-
-  // Peças ACOPLADAS À BASE (giram com baseAngle em torno de Y)
-  // Criamos um projector que aplica rotY antes de projetar
-  const pRot = mkProj(proj, S, cx, cy);
-
-  drawShaft(pRot,S,cx,cy);
-  drawCylinder(pRot,S,cx,cy);
-  drawSemiRingGray(pRot,S,cx,cy);
-  drawBinary(pRot,S,cx,cy);
+  drawBase(proj,S,cx,cy);
+  drawPlaneXpZp(proj,S,cx,cy);
+  drawShaft(proj,S,cx,cy);
+  drawCylinder(proj,S,cx,cy);
+  drawSemiRingGray(proj,S,cx,cy);
+  drawBinary(proj,S,cx,cy);
 
   if(showDims){
     drawDim(proj,S,cx,cy, [-L/2,0,L/2], [L/2,0,L/2], 'L', 20);
+    drawDim(proj,S,cx,cy, [L/2,0,L/2], [L/2,-BH,L/2], '0.01L', 20);
     drawDim(proj,S,cx,cy, [CX2,0,CZ2], [CX2,CH,CZ2], '0.6L', 16);
-    drawDim(proj,S,cx,cy, [CX1,CH,CZ2],[CX2,CH,CZ2], '0.1L', -14);
+    drawDim(proj,S,cx,cy, [CX1,CH,CZ2], [CX2,CH,CZ2], '0.1L', -14);
+    drawDim(proj,S,cx,cy, [xA_dim,CH,0], [xB_dim,CH,0], '0.1L', -16);
   }
 }
 
 // ═══════════════════════════════════════════════════════
-// DRAW — 4 quadrantes
+// DRAW
 // ═══════════════════════════════════════════════════════
 function draw(){
   ctx.clearRect(0,0,W,W);
-  [[0,0,'#f5edd8'],[Q,0,'#f2e9d0'],[0,Q,'#f0e6cc'],[Q,Q,'#eee4ca']].forEach(function(q){
-    ctx.fillStyle=q[2]; ctx.fillRect(q[0],q[1],Q,Q); grid(q[0],q[1]);
+
+  // Fundos
+  [[0,0,'#f5edd8'],[Q,0,'#f2e9d0'],[0,Q,'#f0e6cc'],[Q,Q,'#eee4ca']].forEach(([x,y,c])=>{
+    ctx.fillStyle=c; ctx.fillRect(x,y,Q,Q); grid(x,y);
   });
-  // Q1 ISO
+
+  // Q1 — ISO 3D
   ctx.save(); ctx.beginPath(); ctx.rect(0,0,Q,Q); ctx.clip();
-  renderQ(pISO,115,Q/2,Q/2+15,true); qtitle('ISO 3D'); ctx.restore();
-  // Q2 Vista X
+  renderQ(pISO, 115, Q/2, Q/2+15, true);
+  qtitle('ISO 3D');
+  ctx.restore();
+
+  // Q2 — Vista ←X (plano YZ)
   ctx.save(); ctx.beginPath(); ctx.rect(Q,0,Q,Q); ctx.clip(); ctx.translate(Q,0);
-  renderQ(pX,115,Q/2,Q/2+10,false); qtitle('VISTA <- X  (plano YZ)'); ctx.restore();
-  // Q3 Vista Y
+  renderQ(pX, 115, Q/2, Q/2+10, false);
+  qtitle('VISTA ← X  (plano YZ)');
+  ctx.restore();
+
+  // Q3 — Vista ↓Y (plano XZ)
   ctx.save(); ctx.beginPath(); ctx.rect(0,Q,Q,Q); ctx.clip(); ctx.translate(0,Q);
-  renderQ(pY,115,Q/2,Q/2+10,false); qtitle('VISTA v Y  (plano XZ)'); ctx.restore();
-  // Q4 Vista Z
+  renderQ(pY, 115, Q/2, Q/2+10, false);
+  qtitle('VISTA ↓ Y  (plano XZ)');
+  ctx.restore();
+
+  // Q4 — Vista ◉Z (plano XY)
   ctx.save(); ctx.beginPath(); ctx.rect(Q,Q,Q,Q); ctx.clip(); ctx.translate(Q,Q);
-  renderQ(pZ,115,Q/2,Q/2+10,false); qtitle('VISTA . Z  (plano XY)'); ctx.restore();
+  renderQ(pZ, 115, Q/2, Q/2+10, false);
+  qtitle('VISTA ◉ Z  (plano XY)');
+  ctx.restore();
+
   // Divisores
   ctx.strokeStyle='#a89878'; ctx.lineWidth=1.5;
   ctx.beginPath(); ctx.moveTo(0,Q); ctx.lineTo(W,Q); ctx.stroke();
   ctx.beginPath(); ctx.moveTo(Q,0); ctx.lineTo(Q,W); ctx.stroke();
-  ctx.beginPath(); ctx.arc(Q,Q,5,0,Math.PI*2); ctx.fillStyle='#a89878'; ctx.fill();
+  ctx.beginPath(); ctx.arc(Q,Q,5,0,Math.PI*2);
+  ctx.fillStyle='#a89878'; ctx.fill();
 }
 
-function frame(){
-  if(!paused){
-    spinAngle += spinDir * STEP_DEG;
-    if(spinAngle <= -MAX_DEG){ spinAngle=-MAX_DEG; spinDir= 1; }
-    if(spinAngle >= 0)        { spinAngle=0;        spinDir=-1; }
-  }
+function frame(ts){
+  lastTime=ts;
+  spinAngle += spinDir * STEP_DEG;
+  if(spinAngle >= MAX_DEG){ spinAngle=MAX_DEG; spinDir=-1; }
+  if(spinAngle <= 0)       { spinAngle=0;       spinDir= 1; }
   draw();
   requestAnimationFrame(frame);
 }
