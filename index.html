@@ -16,7 +16,8 @@
 
   .wrap {
     position:relative; width:min(680px, 95vw); aspect-ratio:1;
-    background:#f0e6d0; border:1px solid #c8b898; border-radius:6px;
+    background:#f0e6d0; border:2px solid #c8b898; border-radius:6px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
   }
   canvas { display:block; width:100%; height:100%; }
 
@@ -24,86 +25,87 @@
     display:flex; gap:10px; width:min(680px, 95vw);
   }
   button {
-    flex:1; font-family:'Space Mono',monospace; font-size:0.7rem; font-weight:700;
-    padding:12px; border:1.5px solid #c8b898; background:#f5edd8;
+    flex:1; font-family:'Space Mono',monospace; font-size:0.75rem; font-weight:700;
+    padding:15px; border:1.5px solid #c8b898; background:#f5edd8;
     color:#2a2e3a; border-radius:4px; cursor:pointer;
   }
-  button:hover { background:#ede1c5; }
+  button:hover { background:#ede1c5; border-color: #8a7a5a; }
   button:active { background:#c8b898; color:white; }
 
   .info {
-    font-size:0.6rem; color:#7a6e5a; text-transform:uppercase; letter-spacing:0.1em;
+    font-size:0.7rem; color:#7a6e5a; text-transform:uppercase; letter-spacing:0.1em;
+    background: #f0e6d0; padding: 5px 15px; border-radius: 20px; border: 1px solid #c8b898;
   }
 </style>
 </head>
 <body>
 
-<div class="info">Rotação Atual (Y): <span id="valY">0</span>°</div>
+<div class="info">Rotação Global (Y): <span id="valY">0</span>°</div>
 
 <div class="wrap"><canvas id="c" width="680" height="680"></canvas></div>
 
 <div class="ui">
-  <button onclick="rotateY(-15)">↺ -15° (Sentido Horário)</button>
-  <button onclick="rotateY(15)">↻ +15° (Sentido Anti-horário)</button>
+  <button onclick="changeRotation(-15)">↺ ROTACIONAR -15°</button>
+  <button onclick="changeRotation(15)">↻ ROTACIONAR +15°</button>
 </div>
 
 <script>
 // ———————————————————————————————————————————————————————
-// CONSTANTES TÉCNICAS (Skill Domingueiro)
+// CONFIGURAÇÕES TÉCNICAS
 // ———————————————————————————————————————————————————————
 const L = 1.0;
-const CH = 0.6 * L;       // Altura da coluna
-const SR_OUT = 0.375 * L; // Raio do semi-anel
-const MASS_R = 0.03 * L;  // Raio das massas
-const W = 680, Q = 340;   // Canvas e Quadrantes
+const CH = 0.6 * L;       
+const SR_OUT = 0.35 * L; 
+const MASS_R = 0.04 * L;  
+const W = 680, Q = 340;   
 
-const cv = document.getElementById('c'), ctx = cv.getContext('2d');
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
 
-// Estado
 let globalRotationY = 0;
 
 // ———————————————————————————————————————————————————————
-// PROJEÇÕES (ISO, X, Y, Z)
+// MATEMÁTICA DE PROJEÇÃO
 // ———————————————————————————————————————————————————————
-function rotatePointY(x, y, z, deg) {
+function rotateY(x, y, z, deg) {
   const rad = deg * Math.PI / 180;
   const c = Math.cos(rad), s = Math.sin(rad);
   return [x * c + z * s, y, -x * s + z * c];
 }
 
-function pISO(x, y, z, S, cx, cy) {
-  const [rx, ry, rz] = rotatePointY(x, y, z, globalRotationY);
-  return [cx + S * (0.866 * rx - 0.866 * rz), cy + S * (0.25 * rx - ry + 0.25 * rz)];
-}
-
-function pX(x, y, z, S, cx, cy) {
-  const [rx, ry, rz] = rotatePointY(x, y, z, globalRotationY);
-  return [cx - S * rz, cy - S * ry];
-}
-
-function pY(x, y, z, S, cx, cy) {
-  const [rx, ry, rz] = rotatePointY(x, y, z, globalRotationY);
-  return [cx + S * rx, cy - S * rz];
-}
-
-function pZ(x, y, z, S, cx, cy) {
-  const [rx, ry, rz] = rotatePointY(x, y, z, globalRotationY);
-  return [cx + S * rx, cy - S * ry];
-}
+// Projetores (Recebem coordenadas MUNDO e cospitem TELA)
+const projs = {
+  iso: (x, y, z, S, cx, cy) => {
+    const [rx, ry, rz] = rotateY(x, y, z, globalRotationY);
+    return [cx + S * (0.866 * rx - 0.866 * rz), cy + S * (0.25 * rx - ry + 0.25 * rz)];
+  },
+  front: (x, y, z, S, cx, cy) => { // Vista X (Plano YZ)
+    const [rx, ry, rz] = rotateY(x, y, z, globalRotationY);
+    return [cx - S * rz, cy - S * ry];
+  },
+  top: (x, y, z, S, cx, cy) => { // Vista Y (Plano XZ)
+    const [rx, ry, rz] = rotateY(x, y, z, globalRotationY);
+    return [cx + S * rx, cy - S * rz];
+  },
+  side: (x, y, z, S, cx, cy) => { // Vista Z (Plano XY)
+    const [rx, ry, rz] = rotateY(x, y, z, globalRotationY);
+    return [cx + S * rx, cy - S * ry];
+  }
+};
 
 // ———————————————————————————————————————————————————————
-// FUNÇÕES DE DESENHO
+// ROTINAS DE DESENHO
 // ———————————————————————————————————————————————————————
-function drawLine(p1, p2, col, lw = 1, dash = []) {
-  ctx.save(); ctx.beginPath(); ctx.setLineDash(dash);
-  ctx.moveTo(p1[0], p1[1]); ctx.lineTo(p2[0], p2[1]);
-  ctx.strokeStyle = col; ctx.lineWidth = lw; ctx.stroke(); ctx.restore();
-}
+function drawFrame(projFunc, S, cx, cy, title) {
+  const p = (x, y, z) => projFunc(x, y, z, S, cx, cy);
 
-function drawPart(proj, S, cx, cy) {
-  const p = (x, y, z) => proj(x, y, z, S, cx, cy);
+  // 1. GRADE DE FUNDO (Opcional, para referência)
+  ctx.strokeStyle = "#e2d6bf"; ctx.lineWidth = 1;
+  for(let i=-2; i<=2; i++) {
+    const p1 = p(i*0.25, 0, -0.5), p2 = p(i*0.25, 0, 0.5);
+    ctx.beginPath(); ctx.moveTo(...p1); ctx.lineTo(...p2); ctx.stroke();
+  }
 
-  // 1. BASE (L x L)
-  const b1 = p(0.5, 0, 0.5), b2 = p(-0.5, 0, 0.5), b3 = p(-0.5, 0, -0.5), b4 = p(0.5, 0, -0.5);
-  ctx.fillStyle = "rgba(176, 168, 152, 0.5)"; ctx.beginPath();
-  ctx.moveTo(...b1); ctx.lineTo(...b2); ctx.lineTo(...b3); ctx.lineTo(...b4); ctx.fill
+  // 2. BASE
+  const bpts = [p(0.5,0,0.5), p(-0.5,0,0.5), p(-0.5,0,-0.5), p(0.5,0,-0.5)];
+  ctx.fillStyle = "rgba(160, 150, 13
