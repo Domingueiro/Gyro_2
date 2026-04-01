@@ -2,60 +2,90 @@
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <title>Giroscópio Físico - Domingueiro</title>
+    <title>Giroscópio Físico - Paleta Original</title>
     <style>
-        body { background: #1a1a1a; color: #fbbf24; font-family: monospace; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; }
-        canvas { background: #000; border: 2px solid #fbbf24; box-shadow: 0 0 20px rgba(251, 191, 36, 0.2); cursor: crosshair; }
-        .controls { margin-top: 15px; display: flex; gap: 20px; background: #262626; padding: 15px; border-radius: 8px; border: 1px solid #404040; }
-        .label { font-size: 12px; text-transform: uppercase; letter-spacing: 1px; }
-        input[type=range] { accent-color: #fbbf24; width: 200px; }
+        /* ———————————————————————————————————————————————————————
+           ESTILOS (Paleta Original Restaurada)
+           ——————————————————————————————————————————————————————— */
+        @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&display=swap');
+        *, *::before, *::after { box-sizing:border-box; margin:0; padding:0; }
+
+        body {
+            background:#e8dcc8; color:#2a2e3a;
+            font-family:'Space Mono',monospace;
+            display:flex; flex-direction:column; align-items:center; padding:20px; gap:15px;
+        }
+
+        .wrap {
+            position:relative; width:min(700px, 95vw); aspect-ratio:1;
+            background:#f0e6d0; border:2px solid #c8b898; border-radius:6px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+        canvas { display:block; width:100%; height:100%; }
+
+        .controls {
+            display:flex; gap:15px; width:min(700px, 95vw);
+            background:#f0e6d0; border:1px solid #c8b898; border-radius:4px; padding:15px;
+        }
+        
+        .control-block { flex:1; display:flex; flex-direction:column; align-items:center; }
+        .label { font-size:10px; text-transform:uppercase; letter-spacing:1px; color:#7a6e5a; margin-bottom:5px; }
+        
+        input[type=range] { width:100%; accent-color:#5a6a8a; cursor:pointer; }
+        .val-display { font-size:12px; font-weight:700; color:#2a2e3a; margin-top:3px; }
+
+        .telemetry { font-weight:bold; color:#a04060; font-size:14px; }
     </style>
 </head>
 <body>
 
-    <div style="margin-bottom: 10px; font-weight: bold; letter-spacing: 2px;">ZELADOR CÍVICO: SENSOR INERCIAL V1.0</div>
-
-    <canvas id="canvas" width="700" height="700"></canvas>
+    <canvas id="c" width="700" height="700" style="display:none;"></canvas> <div class="wrap"><canvas id="giroCanvas" width="700" height="700"></canvas></div>
 
     <div class="controls">
-        <div style="text-align: center;">
+        <div class="control-block">
             <div class="label">Rotação da Base (Y)</div>
             <input type="range" id="baseSlider" min="-45" max="45" step="1" value="0">
-            <div id="baseVal">0°</div>
+            <div id="baseVal" class="val-display">0°</div>
         </div>
-        <div style="text-align: center; opacity: 0.6;">
+        <div class="control-block" style="border-left:1px solid #c8b898; opacity:0.8;">
             <div class="label">Torção Reativa (Anel)</div>
-            <div id="ringVal" style="font-size: 18px; font-weight: bold; color: #fbbf24;">0.0°</div>
+            <div id="ringVal" class="telemetry val-display">0.0°</div>
         </div>
     </div>
 
 <script>
-    const canvas = document.getElementById('canvas');
+    // ———————————————————————————————————————————————————————
+    // CONFIGURAÇÕES TÉCNICAS E CAPTURA DE CONTEXTO
+    // ———————————————————————————————————————————————————————
+    const L = 200;            // Escala ( pixels por L)
+    const CH = 0.6 * L;       // Altura Coluna
+    const SR = 0.38 * L;      // Raio Semi-anel
+    const MR = 8;             // Raio Massas
+    const Q = 350;            // Tamanho Quadrante (700/2)
+
+    const canvas = document.getElementById('giroCanvas');
     const ctx = canvas.getContext('2d');
     const slider = document.getElementById('baseSlider');
     
-    // Constantes do Modelo (L = 200 pixels para visibilidade)
-    const L = 200;
-    const CH = 0.6 * L;
-    const SR = 0.38 * L;
-    const MR = 8;
-    const Q = 350; // Quadrante
-
+    // Variáveis de Estado
     let time = 0;
     let baseAngle = 0;
     let ringAngle = 0;
     let spinAngle = 0;
 
+    // ———————————————————————————————————————————————————————
+    // MOTOR DE PROJEÇÃO (Hierarquia: Anel X -> Base Y)
+    // ———————————————————————————————————————————————————————
     function project(x, y, z, type, cx, cy) {
-        const S = 1.2; // Escala de visualização
+        const S = 1.2; // Escala de visualização técnica
         
-        // 1. Torção do Anel (Eixo X na altura CH)
+        // 1. Torção do Anel (Eixo X na altura CH, compensando o arrasto)
         const ra = ringAngle * Math.PI / 180;
-        let y1 = (y - CH) * Math.cos(ra) - z * Math.sin(ra) + CH;
-        let z1 = (y - CH) * Math.sin(ra) + z * Math.cos(ra);
+        let y1 = (y - CH) * Math.cos(ra) - wz_comp(z) * Math.sin(ra) + CH;
+        let z1 = (y - CH) * Math.sin(ra) + wz_comp(z) * Math.cos(ra);
         let x1 = x;
 
-        // 2. Rotação da Base (Eixo Y)
+        // 2. Rotação da Base (Eixo Y Global)
         const rb = baseAngle * Math.PI / 180;
         let rx = x1 * Math.cos(rb) + z1 * Math.sin(rb);
         let ry = y1;
@@ -72,23 +102,29 @@
         }
     }
 
-    function drawPart(type, cx, cy, label) {
+    // Função auxiliar para evitar erros de flutuação infinitesimais próximos a zero
+    function wz_comp(z) { return Math.abs(z) < 0.0001 ? 0 : z; }
+
+    // ———————————————————————————————————————————————————————
+    // ROTINAS DE DESENHO (Cores Originais Restauradas)
+    // ———————————————————————————————————————————————————————
+    function drawQuadrant(type, cx, cy, label) {
         const p = (x, y, z) => project(x, y, z, type, cx, cy);
 
-        // Grid de base
-        ctx.strokeStyle = '#333'; ctx.lineWidth = 1;
+        // Grade de referência (Dourado pálido)
+        ctx.strokeStyle = '#d4c8b0'; ctx.lineWidth = 1;
         for(let i=-1; i<=1; i+=0.5) {
             let p1 = p(i*L/2, 0, -L/2), p2 = p(i*L/2, 0, L/2);
             ctx.beginPath(); ctx.moveTo(...p1); ctx.lineTo(...p2); ctx.stroke();
         }
 
-        // Coluna (Roxa)
+        // Coluna (Roxo Original)
         const c1 = p(0.45*L, 0, 0), c2 = p(0.45*L, CH, 0);
-        ctx.strokeStyle = '#a855f7'; ctx.lineWidth = 5;
+        ctx.strokeStyle = '#8050a0'; ctx.lineWidth = 5;
         ctx.beginPath(); ctx.moveTo(...c1); ctx.lineTo(...c2); ctx.stroke();
 
-        // Semi-Anel (Azul Inercial)
-        ctx.strokeStyle = '#3b82f6'; ctx.lineWidth = 3;
+        // Semi-Anel (Azul Original)
+        ctx.strokeStyle = '#4a6080'; ctx.lineWidth = 3;
         ctx.beginPath();
         for(let i=0; i<=30; i++) {
             let th = -Math.PI/2 + (i/30)*Math.PI;
@@ -97,54 +133,66 @@
         }
         ctx.stroke();
 
-        // Binário (Haste e Massas)
+        // Binário (Haste Preta e Massas Amarelas)
         const sa = spinAngle * Math.PI / 180;
         const m1_coord = [SR * Math.sin(sa), CH + SR * Math.cos(sa), 0];
         const m2_coord = [-SR * Math.sin(sa), CH - SR * Math.cos(sa), 0];
         const m1 = p(...m1_coord), m2 = p(...m2_coord);
 
-        ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
+        // Haste
+        ctx.strokeStyle = '#2a2e3a'; ctx.lineWidth = 2.5;
         ctx.beginPath(); ctx.moveTo(...m1); ctx.lineTo(...m2); ctx.stroke();
 
+        // Massas
         [m1, m2].forEach(m => {
-            ctx.fillStyle = '#fbbf24'; ctx.beginPath();
-            ctx.arc(m[0], m[1], MR, 0, Math.PI*2); ctx.fill();
-            ctx.strokeStyle = '#000'; ctx.stroke();
+            ctx.fillStyle = '#7a5a10'; ctx.strokeStyle='#000'; ctx.lineWidth=1;
+            ctx.beginPath(); ctx.arc(m[0], m[1], MR, 0, Math.PI*2); ctx.fill(); ctx.stroke();
         });
 
-        // Nome da Vista
-        ctx.fillStyle = '#666'; ctx.font = '10px monospace';
+        // Nome da Vista (Cinza técnico)
+        ctx.fillStyle = '#7a6e5a'; ctx.font = 'bold 11px Space Mono';
         ctx.fillText(label, cx - Q/2 + 10, cy - Q/2 + 20);
     }
 
+    // ———————————————————————————————————————————————————————
+    // LOOP PRINCIPAL DE ANIMAÇÃO
+    // ———————————————————————————————————————————————————————
     function loop() {
         ctx.clearRect(0, 0, 700, 700);
         
-        // Atualizar Ângulos
-        time += 0.03;
-        spinAngle = Math.sin(time) * 30; // Movimento pendular
+        // 1. Atualizar Estados
+        time += 0.025; 
+        spinAngle = Math.sin(time) * 30; // Binário oscila sozinho
         baseAngle = parseFloat(slider.value);
         document.getElementById('baseVal').innerText = baseAngle + "°";
 
-        // LEI DE MOVIMENTO: Torção do anel para manter massas em Z=0
+        // 2. CALCULAR LEI DE MOVIMENTO (Insights de Domingueiro)
+        // ringAngle compensa o arrasto gerado pela rotação da base
         ringAngle = -baseAngle * Math.cos(spinAngle * Math.PI / 180);
         document.getElementById('ringVal').innerText = ringAngle.toFixed(1) + "°";
 
-        // Divisórias
-        ctx.strokeStyle = '#222'; ctx.lineWidth = 2;
+        // 3. Desenhar Divisórias dos Quadrantes (Marrom pálido)
+        ctx.strokeStyle = '#c8b898'; ctx.lineWidth = 2;
         ctx.beginPath(); ctx.moveTo(Q,0); ctx.lineTo(Q,700); ctx.stroke();
         ctx.beginPath(); ctx.moveTo(0,Q); ctx.lineTo(700,Q); ctx.stroke();
 
-        // Renderizar Quadrantes
-        drawPart('ISO', Q/2, Q/2, "ISO 3D");
-        drawPart('FRENTE', Q + Q/2, Q/2, "X-VIEW (FRENTE)");
-        drawPart('TOPO', Q/2, Q + Q/2, "Y-VIEW (PLANTA)");
-        drawPart('LADO', Q + Q/2, Q + Q/2, "Z-VIEW (PERFIL)");
+        // 4. Renderizar cada Quadrante
+        drawQuadrant('ISO', Q/2, Q/2, "ISO 3D");
+        drawQuadrant('FRENTE', Q + Q/2, Q/2, "VISTA X (FRENTE)");
+        drawQuadrant('TOPO', Q/2, Q + Q/2, "VISTA Y (TOPO)");
+        drawQuadrant('LADO', Q + Q/2, Q + Q/2, "VISTA Z (LADO)");
 
         requestAnimationFrame(loop);
     }
 
-    loop();
+    // ———————————————————————————————————————————————————————
+    // INICIALIZAÇÃO SEGURA
+    // ———————————————————————————————————————————————————————
+    // Garante que o desenho comece apenas após o carregamento completo do DOM
+    window.onload = function() {
+        loop();
+    };
+
 </script>
 </body>
 </html>
