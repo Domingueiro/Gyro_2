@@ -1,1 +1,267 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Simulador de Giroscópio — Lei de Movimento v1.0</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Crimson+Pro:ital,wght@0,300;0,400&display=swap');
+  *, *::before, *::after { box-sizing:border-box; margin:0; padding:0; }
+
+  body {
+    background:#e8dcc8; color:#2a2e3a;
+    font-family:'Space Mono',monospace;
+    min-height:100vh; display:flex; flex-direction:column;
+    align-items:center; padding:16px; gap:14px;
+  }
+  body::before {
+    content:''; position:fixed; inset:0;
+    background:
+      radial-gradient(ellipse 70% 50% at 50% 40%,#f5edd8 0%,transparent 70%),
+      repeating-linear-gradient(0deg,transparent,transparent 39px,#d4c8b0 40px),
+      repeating-linear-gradient(90deg,transparent,transparent 39px,#d4c8b0 40px);
+    background-size:auto,40px 40px,40px 40px;
+    pointer-events:none; z-index:0;
+  }
+
+  header { position:relative; z-index:1; text-align:center; }
+  header h1 {
+    font-family:'Crimson Pro',serif; font-weight:300;
+    font-size:clamp(0.9rem,2.5vw,1.25rem);
+    color:#1a1e2a; letter-spacing:0.12em; text-transform:uppercase;
+  }
+  header p { font-size:0.54rem; color:#7a6e5a; margin-top:4px; letter-spacing:0.12em; }
+
+  .wrap {
+    position:relative; z-index:1;
+    width:min(680px,98vw); aspect-ratio:1;
+    background:#f0e6d0; border:1px solid #c8b898;
+    border-radius:6px; overflow:hidden;
+  }
+  canvas { display:block; width:100%; height:100%; }
+
+  .controls {
+    position:relative; z-index:1;
+    width:min(680px,98vw);
+    background:#f0e6d0; border:1px solid #c8b898;
+    border-radius:4px; padding:12px;
+    display:flex; flex-direction:column; gap:10px;
+  }
+  
+  .btn-row { display:flex; gap:8px; }
+  button {
+    font-family:'Space Mono',monospace; font-size:0.58rem; padding:8px;
+    border:1.5px solid #c8b898; background:#f5edd8; color:#2a2e3a;
+    border-radius:3px; cursor:pointer; flex:1; transition: 0.2s;
+  }
+  button:hover { background: #e8dcc8; }
+
+  .slider-wrap { font-size:0.55rem; color:#7a6e5a; }
+  input[type=range] { width:100%; accent-color:#5a6a8a; cursor:pointer; }
+
+  .legend {
+    width:min(680px,98vw); font-size:0.52rem; color:#7a6e5a;
+    background:#f0e6d0; border:1px solid #c8b898;
+    border-radius:4px; padding:8px 14px; line-height:1.6;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Giroscópio Físico — Binários</h1>
+  <p>Inércia em Z=0 · Precessão por Torção de Anel</p>
+</header>
+
+<div class="wrap"><canvas id="c" width="680" height="680"></canvas></div>
+
+<div class="controls">
+  <div class="btn-row">
+    <button id="btnPause" onclick="togglePause()">⏸ Pausar</button>
+    <button onclick="resetSim()">⟲ Reset</button>
+  </div>
+  <div class="slider-wrap">
+    <label style="display:block;margin-bottom:4px;text-transform:uppercase;">
+      Torção da Base (Y): <span id="lblBase">0.0</span>°
+    </label>
+    <input type="range" min="-45" max="45" step="0.5" value="0" id="baseSlider"
+      oninput="baseAngle=parseFloat(this.value);document.getElementById('lblBase').textContent=baseAngle.toFixed(1);">
+  </div>
+  <div class="slider-wrap" style="opacity:0.8;">
+    <label style="text-transform:uppercase;">Torção Reativa (Anel): <span id="lblRing">0.0</span>°</label>
+  </div>
+</div>
+
+<div class="legend">
+  <span>L = 1.0</span> · Massas em Plano X'Y (Z=0) · 
+  <span>ISO 3D</span> · <span>VISTA X (YZ)</span> · <span>VISTA Y (XZ)</span> · <span>VISTA Z (XY)</span>
+</div>
+
+<script>
+// ———————————————————————————————————————————————————————
+// CONSTANTES FÍSICAS E GEOMÉTRICAS
+// ———————————————————————————————————————————————————————
+const L = 1.0, BH = 0.01 * L, CH = 0.6 * L;
+const SR_OUT = 0.375 * L, SR_IN = 0.365 * L;
+const MASS_R = 0.03 * L;
+const CX1 = 0.4*L, CX2 = 0.5*L, YP2 = CH;
+
+const W = 680, Q = 340;
+const cv = document.getElementById('c'), ctx = cv.getContext('2d');
+
+// Cores
+const CX='#e05252', CY='#52c0e0', CZ='#7de052';
+
+// ———————————————————————————————————————————————————————
+// ESTADO E LEI DE MOVIMENTO
+// ———————————————————————————————————————————————————————
+let spinAngle = 0;   // Pendular do binário
+let baseAngle = 0;   // Rotação da base (slider)
+let ringAngle = 0;   // Torção calculada do anel
+let time = 0, paused = false;
+
+function updatePhysics() {
+  if(paused) return;
+  time += 0.02;
+  // Binário oscila 0 -> 30 graus
+  spinAngle = (Math.sin(time) * 15) + 15;
+
+  // LEI DE MOVIMENTO: O anel torce para compensar a base e manter as massas em Z=0
+  const a = spinAngle * Math.PI / 180;
+  ringAngle = -baseAngle * Math.cos(a);
+  
+  document.getElementById('lblRing').textContent = ringAngle.toFixed(1);
+}
+
+// ———————————————————————————————————————————————————————
+// PROJEÇÕES E HIERARQUIA
+// ———————————————————————————————————————————————————————
+function pISO(x,y,z,S,cx,cy){ return [cx + S*(0.866*x - 0.866*z), cy + S*(0.25*x - y + 0.25*z)]; }
+function pX(x,y,z,S,cx,cy){ return [cx - S*z, cy - S*y]; }
+function pY(x,y,z,S,cx,cy){ return [cx + S*x, cy - S*z]; }
+function pZ(x,y,z,S,cx,cy){ return [cx + S*x, cy - S*y]; }
+
+// Aplica Rotação da Base (Y) -> Torção do Anel (X)
+function pMovel(wx, wy, wz, proj, S, cx, cy) {
+  const ra = ringAngle * Math.PI / 180, rb = baseAngle * Math.PI / 180;
+  
+  // 1. Torção do Anel (Eixo X em Y=CH)
+  let y1 = (wy - CH) * Math.cos(ra) - wz * Math.sin(ra) + CH;
+  let z1 = (wy - CH) * Math.sin(ra) + wz * Math.cos(ra);
+  let x1 = wx;
+
+  // 2. Rotação da Base (Eixo Y)
+  let rx = x1 * Math.cos(rb) + z1 * Math.sin(rb);
+  let ry = y1;
+  let rz = -x1 * Math.sin(rb) + z1 * Math.cos(rb);
+
+  return proj(rx, ry, rz, S, cx, cy);
+}
+
+// ———————————————————————————————————————————————————————
+// DESENHO TÉCNICO
+// ———————————————————————————————————————————————————————
+function poly(pts, fill, stroke, lw=1, alpha=1){
+  ctx.save(); ctx.globalAlpha=alpha; ctx.beginPath();
+  ctx.moveTo(pts[0][0],pts[0][1]); pts.forEach(p=>ctx.lineTo(p[0],p[1]));
+  ctx.closePath(); if(fill){ctx.fillStyle=fill;ctx.fill();}
+  if(stroke){ctx.strokeStyle=stroke;ctx.lineWidth=lw;ctx.stroke();} ctx.restore();
+}
+
+function drawDim(proj, S, cx, cy, p1, p2, label, offset){
+  const c1=proj(...p1,S,cx,cy), c2=proj(...p2,S,cx,cy);
+  const dx=c2[0]-c1[0], dy=c2[1]-c1[1], l=Math.hypot(dx,dy);
+  if(l<5) return;
+  const nx=-dy/l, ny=dx/l;
+  ctx.save(); ctx.globalAlpha=0.5; ctx.setLineDash([2,2]);
+  ctx.beginPath(); ctx.moveTo(c1[0]+nx*offset, c1[1]+ny*offset);
+  ctx.lineTo(c2[0]+nx*offset, c2[1]+ny*offset);
+  ctx.strokeStyle='#7a6e5a'; ctx.stroke();
+  ctx.font="7px 'Space Mono'"; ctx.fillText(label, (c1[0]+c2[0])/2+nx*(offset+8), (c1[1]+c2[1])/2+ny*(offset+8));
+  ctx.restore();
+}
+
+function drawBase(proj,S,cx,cy){
+  const p=(x,y,z)=>proj(x,y,z,S,cx,cy);
+  const h=L/2;
+  const f1=p(h,0,h), f2=p(-h,0,h), f3=p(-h,0,-h), f4=p(h,0,-h);
+  poly([f1,f2,f3,f4], '#b0a898', '#7a6e5a', 1, 0.8);
+}
+
+function drawColumn(proj,S,cx,cy){
+  const pm=(x,y,z)=>pMovel(x,y,z,proj,S,cx,cy);
+  // Simplificado: Face externa da coluna roxa
+  const t1=pm(CX2,CH,0.05), t2=pm(CX1,CH,0.05), b1=pm(CX2,0,0.05), b2=pm(CX1,0,0.05);
+  poly([t1,t2,b2,b1], '#a060b8', '#603080', 1, 0.9);
+}
+
+function drawSemiRing(proj,S,cx,cy){
+  const pm=(x,y,z)=>pMovel(x,y,z,proj,S,cx,cy);
+  ctx.beginPath();
+  for(let i=0; i<=30; i++){
+    const th = -Math.PI/2 + (i/30)*Math.PI;
+    const pt = pm(SR_OUT*Math.cos(th), YP2, SR_OUT*Math.sin(th));
+    i===0 ? ctx.moveTo(...pt) : ctx.lineTo(...pt);
+  }
+  ctx.strokeStyle='#8a9ab0'; ctx.lineWidth=3; ctx.stroke();
+}
+
+function drawBinary(proj, S, cx, cy) {
+  const pm = (x, y, z) => pMovel(x, y, z, proj, S, cx, cy);
+  const a = spinAngle * Math.PI / 180;
+  const M1 = [SR_OUT*Math.sin(a), CH + SR_OUT*Math.cos(a), 0];
+  const M2 = [-SR_OUT*Math.sin(a), CH - SR_OUT*Math.cos(a), 0];
+  const p1 = pm(...M1), p2 = pm(...M2);
+
+  // Haste
+  ctx.beginPath(); ctx.moveTo(...p1); ctx.lineTo(...p2);
+  ctx.strokeStyle='#5a6a8a'; ctx.lineWidth=2.5; ctx.stroke();
+  // Massas
+  [p1,p2].forEach(pt => {
+    ctx.beginPath(); ctx.arc(pt[0], pt[1], MASS_R*S, 0, Math.PI*2);
+    ctx.fillStyle='#7a5a10'; ctx.fill(); ctx.stroke();
+  });
+}
+
+function renderQ(proj, S, cx, cy, title, dims=false){
+  ctx.save(); ctx.beginPath(); ctx.rect(cx-Q/2, cy-Q/2, Q, Q); ctx.clip();
+  // Estático
+  drawBase(proj, S, cx, cy);
+  // Móvel
+  drawColumn(proj, S, cx, cy);
+  drawSemiRing(proj, S, cx, cy);
+  drawBinary(proj, S, cx, cy);
+  
+  if(dims) drawDim(proj, S, cx, cy, [CX2,0,0], [CX2,CH,0], "0.6L", 15);
+  
+  ctx.font="bold 8px 'Space Mono'"; ctx.fillStyle='#7a6e5a';
+  ctx.fillText(title, cx-Q/2+10, cy-Q/2+15);
+  ctx.restore();
+}
+
+function draw(){
+  ctx.clearRect(0,0,W,W);
+  // Grid e Quadrantes
+  ctx.strokeStyle='#d4c8b0'; ctx.lineWidth=0.5;
+  for(let i=0;i<=W;i+=Q){ ctx.beginPath();ctx.moveTo(i,0);ctx.lineTo(i,W);ctx.stroke(); }
+  for(let j=0;j<=W;j+=Q){ ctx.beginPath();ctx.moveTo(0,j);ctx.lineTo(W,j);ctx.stroke(); }
+
+  renderQ(pISO, 120, Q/2, Q/2+20, "ISO 3D", true);
+  renderQ(pX, 120, Q+Q/2, Q/2, "VISTA X (YZ)");
+  renderQ(pY, 120, Q/2, Q+Q/2, "VISTA Y (XZ)");
+  renderQ(pZ, 120, Q+Q/2, Q+Q/2, "VISTA Z (XY)");
+}
+
+function togglePause(){ paused=!paused; document.getElementById('btnPause').textContent=paused?'▶ Continuar':'⏸ Pausar'; }
+function resetSim(){ time=0; baseAngle=0; document.getElementById('baseSlider').value=0; document.getElementById('lblBase').textContent="0.0"; }
+
+function frame(){
+  updatePhysics();
+  draw();
+  requestAnimationFrame(frame);
+}
+frame();
+</script>
+</body>
+</html>
 
