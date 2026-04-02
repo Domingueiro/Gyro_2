@@ -73,45 +73,32 @@
 // CONSTANTES
 // ═══════════════════════════════════════════════════════
 const L   = 1.0;
-const BH  = 0.01 * L;    // espessura da base
-
-// Cores
+const BH  = 0.01 * L;
 const CX='#e05252', CY='#52c0e0', CZ='#7de052';
-const CBASE_TOP ='#b0a898';   // face superior da base
-const CBASE_SIDE='#8a8078';   // faces laterais
-const CBASE_BOT ='#6a6058';   // face inferior
-const CAXIS ='#c06080';       // eixo vertical
-const CAXIS2='#a04060';
-
-// ═══════════════════════════════════════════════════════
-// CANVAS
-// ═══════════════════════════════════════════════════════
+const CBASE_TOP ='#b0a898';
+const CBASE_SIDE='#8a8078';
+const CBASE_BOT ='#6a6058';
 const cv=document.getElementById('c');
 const ctx=cv.getContext('2d');
 const W=680, Q=340;
 
 // ═══════════════════════════════════════════════════════
-// PROJEÇÕES  (S=escala, cx,cy=origem no quadrante)
+// PROJEÇÕES
 // ═══════════════════════════════════════════════════════
 function pISO(wx,wy,wz,S,cx,cy){
-  return[
-    cx + S*(0.866*wx - 0.866*wz),
-    cy + S*(0.25*wx  - wy       + 0.25*wz)
-  ];
+  return[cx+S*(0.866*wx-0.866*wz), cy+S*(0.25*wx-wy+0.25*wz)];
 }
-function pX(wx,wy,wz,S,cx,cy){ return[cx - S*wz, cy - S*wy]; }
-function pY(wx,wy,wz,S,cx,cy){ return[cx + S*wx,  cy - S*wz]; }
-function pZ(wx,wy,wz,S,cx,cy){ return[cx + S*wx,  cy - S*wy]; }
+function pX(wx,wy,wz,S,cx,cy){ return[cx-S*wz, cy-S*wy]; }
+function pY(wx,wy,wz,S,cx,cy){ return[cx+S*wx, cy-S*wz]; }
+function pZ(wx,wy,wz,S,cx,cy){ return[cx+S*wx, cy-S*wy]; }
 
 // ═══════════════════════════════════════════════════════
 // HELPERS
 // ═══════════════════════════════════════════════════════
 function poly(pts, fill, stroke, lw=1, alpha=1){
   ctx.save(); ctx.globalAlpha=alpha;
-  ctx.beginPath();
-  ctx.moveTo(pts[0][0],pts[0][1]);
-  pts.forEach(([x,y])=>ctx.lineTo(x,y));
-  ctx.closePath();
+  ctx.beginPath(); ctx.moveTo(pts[0][0],pts[0][1]);
+  pts.forEach(([x,y])=>ctx.lineTo(x,y)); ctx.closePath();
   if(fill){ctx.fillStyle=fill;ctx.fill();}
   if(stroke){ctx.strokeStyle=stroke;ctx.lineWidth=lw;ctx.stroke();}
   ctx.restore();
@@ -128,8 +115,7 @@ function arr(x1,y1,x2,y2,col,lw=2,hl=8){
   const nx=dx/l,ny=dy/l;
   ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);
   ctx.strokeStyle=col;ctx.lineWidth=lw;ctx.stroke();
-  ctx.beginPath();
-  ctx.moveTo(x2,y2);
+  ctx.beginPath(); ctx.moveTo(x2,y2);
   ctx.lineTo(x2-hl*(nx-ny*0.4),y2-hl*(ny+nx*0.4));
   ctx.lineTo(x2-hl*(nx+ny*0.4),y2-hl*(ny-nx*0.4));
   ctx.closePath();ctx.fillStyle=col;ctx.fill();
@@ -151,37 +137,27 @@ function grid(x0,y0){
 }
 
 function qtitle(t){
-  ctx.font="bold 8px 'Space Mono'";ctx.fillStyle='#7a6e5a';ctx.fillText(t,8,14);
+  // Título em PRETO para máximo contraste
+  ctx.font="bold 9px 'Space Mono'";
+  ctx.fillStyle='#000000';
+  ctx.fillText(t,8,18);
 }
 
-// ═══════════════════════════════════════════════════════
-// EIXOS ORTOGONAIS
-// ═══════════════════════════════════════════════════════
 function drawAxes(proj,S,cx,cy){
   const p=(x,y,z)=>proj(x,y,z,S,cx,cy);
   const O=p(0,0,0);
   const ext=0.65*L;
-  dline(...p(-ext,0,0),...O,CX,1.2);
-  arr(...O,...p(ext,0,0),CX,2,8);
-  txt('X',...p(ext+0.04,0,0),CX,10,true);
-  dline(...p(0,-0.25*L,0),...O,CY,1.2);
-  arr(...O,...p(0,ext,0),CY,2,8);
-  txt('Y',...p(0,ext+0.04,0),CY,10,true);
-  dline(...p(0,0,-ext*0.5),...O,CZ,1.2);
-  arr(...O,...p(0,0,ext),CZ,2,8);
-  txt('Z',...p(0,0,ext+0.04),CZ,10,true);
-  ctx.beginPath();ctx.arc(O[0],O[1],3,0,Math.PI*2);
-  ctx.fillStyle='#8a7a6a';ctx.fill();
+  dline(...p(-ext,0,0),...O,CX,1.2); arr(...O,...p(ext,0,0),CX,2,8); txt('X',...p(ext+0.04,0,0),CX,10,true);
+  dline(...p(0,-0.25*L,0),...O,CY,1.2); arr(...O,...p(0,ext,0),CY,2,8); txt('Y',...p(0,ext+0.04,0),CY,10,true);
+  dline(...p(0,0,-ext*0.5),...O,CZ,1.2); arr(...O,...p(0,0,ext),CZ,2,8); txt('Z',...p(0,0,ext+0.04),CZ,10,true);
+  ctx.beginPath();ctx.arc(O[0],O[1],3,0,Math.PI*2); ctx.fillStyle='#8a7a6a';ctx.fill();
 }
 
-// ═══════════════════════════════════════════════════════
-// BASE
-// ═══════════════════════════════════════════════════════
 function drawBase(proj,S,cx,cy){
   const p=(x,y,z)=>proj(x,y,z,S,cx,cy);
   const h=L/2; const y0=0, y1=-BH;
-  const TRF=p( h, y0,  h), TLF=p(-h, y0,  h), TLB=p(-h, y0, -h), TRB=p( h, y0, -h);
-  const BRF=p( h, y1,  h), BLF=p(-h, y1,  h), BLB=p(-h, y1, -h), BRB=p( h, y1, -h);
+  const TRF=p( h,y0,h), TLF=p(-h,y0,h), TLB=p(-h,y0,-h), TRB=p( h,y0,-h);
+  const BRF=p( h,y1,h), BLF=p(-h,y1,h), BLB=p(-h,y1,-h), BRB=p( h,y1,-h);
   poly([BRF,BLF,BLB,BRB], CBASE_BOT, '#504840', 0.8, 0.9);
   poly([TRF,BRF,BRB,TRB], CBASE_SIDE, '#504840', 0.7, 0.9);
   poly([TLF,BLF,BRF,TRF], CBASE_SIDE, '#504840', 0.7, 0.9);
@@ -190,9 +166,6 @@ function drawBase(proj,S,cx,cy){
   poly([TRF,TLF,TLB,TRB], CBASE_TOP, '#706860', 0.8, 0.85);
 }
 
-// ═══════════════════════════════════════════════════════
-// COLUNA
-// ═══════════════════════════════════════════════════════
 const CS=0.10*L, CH=0.60*L, CX1=L/2-CS, CX2=L/2, CZ1=-CS/2, CZ2=CS/2;
 function drawShaft(proj,S,cx,cy){
   const p=(x,y,z)=>proj(x,y,z,S,cx,cy);
@@ -206,9 +179,6 @@ function drawShaft(proj,S,cx,cy){
   poly([TRF,TLF,TLB,TRB], '#d090e0','#603080',0.8,0.95);
 }
 
-// ═══════════════════════════════════════════════════════
-// CILINDRO
-// ═══════════════════════════════════════════════════════
 const CRAD=0.025*L, CLEN=0.10*L, CCX=CX1-CRAD, CCY=CH, CCZ=0, CSEG=24;
 const xA_dim=CCX-CLEN/2, xB_dim=CCX+CLEN/2;
 const YP2=CH, SR_OUT=CCX, SR_IN=SR_OUT-0.01*L, SR_SEG=48;
@@ -231,9 +201,6 @@ function drawCylinder(proj,S,cx,cy){
   ctx.closePath(); ctx.fillStyle='#c090e0'; ctx.strokeStyle='#604880'; ctx.lineWidth=0.8; ctx.fill(); ctx.stroke(); ctx.restore();
 }
 
-// ═══════════════════════════════════════════════════════
-// PLANO X'Z'
-// ═══════════════════════════════════════════════════════
 function drawPlaneXpZp(proj,S,cx,cy){
   const p=(x,y,z)=>proj(x,y,z,S,cx,cy);
   const y=YP2, ext=0.65*L;
@@ -243,13 +210,8 @@ function drawPlaneXpZp(proj,S,cx,cy){
   ctx.save(); ctx.globalAlpha=0.45; ctx.setLineDash([5,4]); ctx.beginPath(); ctx.moveTo(verts[0][0],verts[0][1]);
   verts.forEach(([x,y])=>ctx.lineTo(x,y)); ctx.closePath(); ctx.strokeStyle='#a09060'; ctx.lineWidth=0.9; ctx.stroke(); ctx.restore();
   const [lx,ly]=p(ext*0.72,y,-ext*0.72); ctx.save(); ctx.globalAlpha=0.6; ctx.font="8px 'Space Mono'"; ctx.fillStyle='#a09060'; ctx.fillText("X'Z'",lx,ly); ctx.restore();
-  const [z1x,z1y]=p(0,y,-ext*0.7),[z2x,z2y]=p(0,y,ext*0.7);
-  ctx.save(); ctx.globalAlpha=0.5; ctx.setLineDash([3,4]); ctx.beginPath(); ctx.moveTo(z1x,z1y); ctx.lineTo(z2x,z2y); ctx.strokeStyle='#7de052'; ctx.lineWidth=1.2; ctx.stroke(); ctx.restore();
 }
 
-// ═══════════════════════════════════════════════════════
-// SEMI-ANEL
-// ═══════════════════════════════════════════════════════
 function drawSemiRingGray(proj,S,cx,cy){
   const p=(x,y,z)=>proj(x,y,z,S,cx,cy);
   const Rm=(SR_OUT+SR_IN)/2;
@@ -258,18 +220,10 @@ function drawSemiRingGray(proj,S,cx,cy){
   for(let i=0;i<=SR_SEG;i++){ let t=-Math.PI/2+(i/SR_SEG)*Math.PI; let pts=arcPt(t,SR_OUT); i===0?ctx.moveTo(...pts):ctx.lineTo(...pts); }
   for(let i=SR_SEG;i>=0;i--){ let t=-Math.PI/2+(i/SR_SEG)*Math.PI; let pts=arcPt(t,SR_IN); ctx.lineTo(...pts); }
   ctx.closePath(); ctx.fillStyle='#8a9ab0'; ctx.fill(); ctx.restore();
-  ctx.save(); ctx.beginPath(); for(let i=0;i<=SR_SEG;i++){ let t=-Math.PI/2+(i/SR_SEG)*Math.PI; let pts=arcPt(t,SR_OUT); i===0?ctx.moveTo(...pts):ctx.lineTo(...pts); }
-  ctx.strokeStyle='#5a7090'; ctx.lineWidth=1.5; ctx.stroke(); ctx.restore();
-  [-Math.PI/2, Math.PI/2].forEach(t=>{ let [ax,ay]=arcPt(t,SR_OUT), [bx,by]=arcPt(t,SR_IN); ctx.beginPath(); ctx.moveTo(ax,ay); ctx.lineTo(bx,by); ctx.strokeStyle='#5a7090'; ctx.lineWidth=2; ctx.stroke(); });
-  [-Math.PI/2, Math.PI/2].forEach(t=>{ let [rx,ry]=arcPt(t,Rm); ctx.beginPath(); ctx.arc(rx,ry,5,0,Math.PI*2); ctx.fillStyle='#e8d8b0'; ctx.strokeStyle='#8a7a5a'; ctx.lineWidth=1.5; ctx.fill(); ctx.stroke(); });
-  const [ex,ey]=arcPt(0,Rm); ctx.beginPath(); ctx.arc(ex,ey,5,0,Math.PI*2); ctx.fillStyle='#c06080'; ctx.strokeStyle='#800040'; ctx.lineWidth=1.5; ctx.fill(); ctx.stroke();
 }
 
-// ═══════════════════════════════════════════════════════
-// ESTADO DE ANIMAÇÃO
-// ═══════════════════════════════════════════════════════
-let spinAngle=0, spinDir=1, lastTime=null;
-const STEP_DEG=0.5, MAX_DEG=30.0, MASS_R=0.03*L;
+let spinAngle=0, spinDir=1;
+const MAX_DEG=30.0, MASS_R=0.03*L;
 
 function drawBinary(proj,S,cx,cy){
   const p=(x,y,z)=>proj(x,y,z,S,cx,cy);
@@ -278,51 +232,32 @@ function drawBinary(proj,S,cx,cy){
   const [m1x,m1y]=p(...M1), [m2x,m2y]=p(...M2);
   const SUP1=[0, YP2, -SR_OUT], SUP2=[0, YP2, +SR_OUT];
   const [s1x,s1y]=p(...SUP1), [s2x,s2y]=p(...SUP2);
-
-  ctx.save(); ctx.globalAlpha=0.2; ctx.setLineDash([3,4]); ctx.strokeStyle='#3a7abf'; ctx.beginPath();
-  for(let i=0;i<=60;i++){ let t=(i/60)*MAX_DEG*Math.PI/180; let [tx,ty]=p(SR_OUT*Math.sin(t), YP2+SR_OUT*Math.cos(t), 0); i===0?ctx.moveTo(tx,ty):ctx.lineTo(tx,ty); }
-  ctx.stroke(); ctx.beginPath();
-  for(let i=0;i<=60;i++){ let t=(i/60)*MAX_DEG*Math.PI/180; let [tx,ty]=p(-SR_OUT*Math.sin(t), YP2-SR_OUT*Math.cos(t), 0); i===0?ctx.moveTo(tx,ty):ctx.lineTo(tx,ty); }
-  ctx.stroke(); ctx.restore();
-
   [[m1x,m1y,s1x,s1y],[m1x,m1y,s2x,s2y],[m2x,m2y,s1x,s1y],[m2x,m2y,s2x,s2y]].forEach(s=>{ ctx.beginPath(); ctx.moveTo(s[0],s[1]); ctx.lineTo(s[2],s[3]); ctx.strokeStyle='#8a9ab0'; ctx.globalAlpha=0.3; ctx.stroke(); });
   ctx.beginPath(); ctx.moveTo(m1x,m1y); ctx.lineTo(m2x,m2y); ctx.strokeStyle='#5a6a8a'; ctx.lineWidth=3; ctx.stroke();
   [SUP1,SUP2].forEach(pt=>{ let [px,py]=p(...pt); ctx.beginPath(); ctx.arc(px,py,5,0,Math.PI*2); ctx.fillStyle='#e8d8b0'; ctx.fill(); });
   [M1,M2].forEach(m=>{ let [px,py]=p(...m); ctx.beginPath(); ctx.arc(px,py,MASS_R*S,0,Math.PI*2); ctx.fillStyle='#7a5a10'; ctx.strokeStyle='#f0c060'; ctx.lineWidth=2; ctx.fill(); ctx.stroke(); });
-  const [ox,oy]=p(0,YP2,0); ctx.font="bold 8px 'Space Mono'"; ctx.fillStyle='#5a6a8a'; ctx.fillText(spinAngle.toFixed(1)+'deg', ox+8, oy-5);
 }
 
-function drawDim(proj,S,cx,cy,p1,p2,label,offset,col='#7a6e5a'){
-  const [x1,y1]=proj(...p1,S,cx,cy), [x2,y2]=proj(...p2,S,cx,cy);
-  const dx=x2-x1, dy=y2-y1, l=Math.hypot(dx,dy), nx=-dy/l, ny=dx/l, ox=nx*offset, oy=ny*offset;
-  ctx.save(); ctx.globalAlpha=0.65; ctx.setLineDash([3,3]); ctx.beginPath(); ctx.moveTo(x1+ox,y1+oy); ctx.lineTo(x2+ox,y2+oy); ctx.strokeStyle=col; ctx.stroke();
-  ctx.setLineDash([]); ctx.font="7px 'Space Mono'"; ctx.fillStyle=col; ctx.fillText(label,(x1+x2)/2+ox+nx*8, (y1+y2)/2+oy+ny*8); ctx.restore();
-}
-
-function renderQ(proj,S,cx,cy,showDims){
+function renderQ(proj,S,cx,cy){
   drawAxes(proj,S,cx,cy); drawBase(proj,S,cx,cy); drawPlaneXpZp(proj,S,cx,cy); drawShaft(proj,S,cx,cy); drawCylinder(proj,S,cx,cy); drawSemiRingGray(proj,S,cx,cy); drawBinary(proj,S,cx,cy);
-  if(showDims){ drawDim(proj,S,cx,cy, [-L/2,0,L/2], [L/2,0,L/2], 'L', 20); drawDim(proj,S,cx,cy, [CX2,0,CZ2], [CX2,CH,CZ2], '0.6L', 16); }
 }
 
 function draw(){
   ctx.clearRect(0,0,W,W);
   [[0,0,'#f5edd8'],[Q,0,'#f2e9d0'],[0,Q,'#f0e6cc'],[Q,Q,'#eee4ca']].forEach(([x,y,c])=>{ ctx.fillStyle=c; ctx.fillRect(x,y,Q,Q); grid(x,y); });
-  ctx.save(); ctx.beginPath(); ctx.rect(0,0,Q,Q); ctx.clip(); renderQ(pISO, 115, Q/2, Q/2+15, true); qtitle('ISO 3D'); ctx.restore();
-  ctx.save(); ctx.beginPath(); ctx.rect(Q,0,Q,Q); ctx.clip(); ctx.translate(Q,0); renderQ(pX, 115, Q/2, Q/2+10, false); qtitle('VISTA ← X'); ctx.restore();
-  ctx.save(); ctx.beginPath(); ctx.rect(0,Q,Q,Q); ctx.clip(); ctx.translate(0,Q); renderQ(pY, 115, Q/2, Q/2+10, false); qtitle('VISTA ↓ Y'); ctx.restore();
-  ctx.save(); ctx.beginPath(); ctx.rect(Q,Q,Q,Q); ctx.clip(); ctx.translate(Q,Q); renderQ(pZ, 115, Q/2, Q/2+10, false); qtitle('VISTA ◉ Z'); ctx.restore();
+  
+  ctx.save(); ctx.beginPath(); ctx.rect(0,0,Q,Q); ctx.clip(); renderQ(pISO, 115, Q/2, Q/2+15); qtitle('ISO 3D'); ctx.restore();
+  ctx.save(); ctx.beginPath(); ctx.rect(Q,0,Q,Q); ctx.clip(); ctx.translate(Q,0); renderQ(pX, 115, Q/2, Q/2+10); qtitle('VISTA ← X (plano YZ)'); ctx.restore();
+  ctx.save(); ctx.beginPath(); ctx.rect(0,Q,Q,Q); ctx.clip(); ctx.translate(0,Q); renderQ(pY, 115, Q/2, Q/2+10); qtitle('VISTA ↓ Y (plano XZ)'); ctx.restore();
+  ctx.save(); ctx.beginPath(); ctx.rect(Q,Q,Q,Q); ctx.clip(); ctx.translate(Q,Q); renderQ(pZ, 115, Q/2, Q/2+10); qtitle('VISTA ◉ Z (plano XY)'); ctx.restore();
+
   ctx.strokeStyle='#a89878'; ctx.lineWidth=1.5; ctx.beginPath(); ctx.moveTo(0,Q); ctx.lineTo(W,Q); ctx.stroke(); ctx.beginPath(); ctx.moveTo(Q,0); ctx.lineTo(Q,W); ctx.stroke();
 }
 
-function frame(ts){
-  lastTime=ts;
-  // spinAngle += spinDir * STEP_DEG; // Movimento interrompido conforme solicitado
-  if(spinAngle >= MAX_DEG){ spinAngle=MAX_DEG; spinDir=-1; }
-  if(spinAngle <= 0)       { spinAngle=0;       spinDir= 1; }
+function frame(){
   draw();
   requestAnimationFrame(frame);
 }
-
 requestAnimationFrame(frame);
 </script>
 </body>
