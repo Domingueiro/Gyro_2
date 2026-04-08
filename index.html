@@ -546,7 +546,7 @@ function atualizarBotoes(){
 function girarBase(sentido){
   if(sentido===-1 && spinAngle<=0) return;
   baseAngle =Math.max(-90,Math.min(90,baseAngle +sentido*(-3)));
-  spinAngle =Math.max(0,  Math.min(90,spinAngle +sentido*3));
+  spinAngle =Math.max(0,  Math.min(90,spinAngle +sentido*9));
   document.getElementById('lblBase').textContent=baseAngle.toFixed(0);
   document.getElementById('lblSpin').textContent=spinAngle.toFixed(0);
   atualizarBotoes(); draw();
@@ -562,48 +562,43 @@ function reset(){
 function drawBinary(proj,S,cx,cy){
   const p=(x,y,z)=>proj(x,y,z,S,cx,cy);
   const a = spinAngle * Math.PI / 180;
+  const BR = SR_OUT * (2/3);   // raio do binário = 2/3 do raio do semi-anel
 
-  // Massas giram no plano XY centrado em (0,YP2,0), raio SR_OUT
-  // a=0: alinhadas com Y. a=30: inclinadas 30 graus.
-  const M1 = [-SR_OUT*Math.sin(a),  YP2 + SR_OUT*Math.cos(a), 0];
-  const M2 = [ SR_OUT*Math.sin(a),  YP2 - SR_OUT*Math.cos(a), 0];
+  const M1 = [-BR*Math.sin(a),  YP2 + BR*Math.cos(a), 0];
+  const M2 = [ BR*Math.sin(a),  YP2 - BR*Math.cos(a), 0];
   const [m1x,m1y]=p(...M1), [m2x,m2y]=p(...M2);
 
-  // Mancais de apoio nas extremidades do semi-anel
-  // Usam _pRing para ficarem presos ao anel após sua torção
+  // Mancais nas extremidades do semi-anel (raio SR_OUT — presos ao anel)
   const SUP1=[0, YP2, -SR_OUT], SUP2=[0, YP2, +SR_OUT];
   const pRingFn = _pRing || (function(wx,wy,wz){ return p(wx,wy,wz); });
   const [s1x,s1y]=pRingFn(...SUP1,S,cx,cy), [s2x,s2y]=pRingFn(...SUP2,S,cx,cy);
 
-  // Arcos de trajetoria (sentido +Y→-X para massa superior)
+  // Arcos de trajetória (raio BR)
   ctx.save(); ctx.globalAlpha=0.20; ctx.setLineDash([3,4]);
   ctx.strokeStyle='#3a7abf'; ctx.lineWidth=1;
   ctx.beginPath();
   for(let i=0;i<=60;i++){
     const t=(i/60)*MAX_DEG*Math.PI/180;
-    const [tx,ty]=p(-SR_OUT*Math.sin(t), YP2+SR_OUT*Math.cos(t), 0);
+    const [tx,ty]=p(-BR*Math.sin(t), YP2+BR*Math.cos(t), 0);
     i===0?ctx.moveTo(tx,ty):ctx.lineTo(tx,ty);
   }
   ctx.stroke();
   ctx.beginPath();
   for(let i=0;i<=60;i++){
     const t=(i/60)*MAX_DEG*Math.PI/180;
-    const [tx,ty]=p( SR_OUT*Math.sin(t), YP2-SR_OUT*Math.cos(t), 0);
+    const [tx,ty]=p( BR*Math.sin(t), YP2-BR*Math.cos(t), 0);
     i===0?ctx.moveTo(tx,ty):ctx.lineTo(tx,ty);
   }
   ctx.stroke();
   ctx.setLineDash([]); ctx.restore();
 
-  // Conexoes massa-mancal
-  ctx.save(); ctx.globalAlpha=0.30;
-  ctx.strokeStyle='#8a9ab0'; ctx.lineWidth=1;
-  [[m1x,m1y,s1x,s1y],[m1x,m1y,s2x,s2y],
-   [m2x,m2y,s1x,s1y],[m2x,m2y,s2x,s2y]].forEach(function(seg){
-    ctx.beginPath(); ctx.moveTo(seg[0],seg[1]); ctx.lineTo(seg[2],seg[3]); ctx.stroke();
-  });
+  // Eixo que sustenta o binário (de mancal a mancal, estilo similar à haste)
+  ctx.save();
+  ctx.beginPath(); ctx.moveTo(s1x,s1y); ctx.lineTo(s2x,s2y);
+  ctx.strokeStyle='#6a7a9a'; ctx.lineWidth=3; ctx.lineCap='round'; ctx.stroke();
   ctx.restore();
 
-  // Haste principal
+  // Haste principal (interliga as massas)
   ctx.save();
   ctx.beginPath(); ctx.moveTo(m1x,m1y); ctx.lineTo(m2x,m2y);
   ctx.strokeStyle='#5a6a8a'; ctx.lineWidth=3; ctx.lineCap='round'; ctx.stroke();
@@ -709,14 +704,12 @@ function pXprime(wx,wy,wz,S,cx,cy){
   return [cx - S*lz, cy - S*ly];
 }
 
-// Vista do plano X'Z' de quem olha pelo eixo Y (+Y→−Y): vê plano X'–Z'
-// Invertida em V para orientação correta
+// Vista do plano X'Z' de quem olha pelo eixo Y (+Y→−Y)
+// Rotacionada 90°: X' aponta para cima (alinhado com direção do avião)
+// Vista ↓Y: eixos X e Z fixos, base+coluna+anel giram com mkProj
+// Sem desfazer rotação da base — proj fixo no espaço mundial
 function pYdown(wx,wy,wz,S,cx,cy){
-  const b=-baseAngle*Math.PI/180;
-  const c=Math.cos(b),s=Math.sin(b);
-  const lx=wx*c+wz*s, ly=wy, lz=-wx*s+wz*c;
-  // V invertido: Z' positivo vai para cima
-  return [cx + S*lx, cy + S*lz];
+  return [cx + S*wz, cy - S*wx];
 }
 
 
